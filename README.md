@@ -22,7 +22,7 @@ An interactive 3D solar system viewer that accurately plots the positions and fu
 - [x] Backend API - FastAPI with REST endpoints ✨
 - [x] Frontend visualization - React + Three.js 3D viewer ✨
 
-🚀 **Live Demo**: [Frontend](https://3000--0199ad84-7027-76e5-80a1-b3d96a8105a5.us-east-1-01.gitpod.dev) | [API](https://8000--0199ad84-7027-76e5-80a1-b3d96a8105a5.us-east-1-01.gitpod.dev)
+🚀 **Live Demo**: [Frontend](https://5173--0199ad84-7027-76e5-80a1-b3d96a8105a5.us-east-1-01.gitpod.dev) | [API](https://8000--0199ad84-7027-76e5-80a1-b3d96a8105a5.us-east-1-01.gitpod.dev)
 
 ## Quick Start
 
