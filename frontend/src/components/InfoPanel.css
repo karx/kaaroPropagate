@@ -1,0 +1,82 @@
+.info-panel {
+  background: #1a1a2e;
+  border-left: 2px solid #0f3460;
+  padding: 20px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.info-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.info-section h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #667eea;
+  border-bottom: 1px solid #0f3460;
+  padding-bottom: 8px;
+}
+
+.info-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.info-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: #16213e;
+  border-radius: 6px;
+  border: 1px solid #0f3460;
+}
+
+.info-label {
+  font-size: 13px;
+  color: #aaa;
+  font-weight: 500;
+}
+
+.info-value {
+  font-size: 14px;
+  color: #fff;
+  font-weight: 600;
+  text-align: right;
+}
+
+.info-text {
+  font-size: 13px;
+  color: #aaa;
+  line-height: 1.6;
+  margin: 0;
+}
+
+.info-text + .info-text {
+  margin-top: 8px;
+}
+
+/* Scrollbar styling */
+.info-panel::-webkit-scrollbar {
+  width: 8px;
+}
+
+.info-panel::-webkit-scrollbar-track {
+  background: #0a1929;
+}
+
+.info-panel::-webkit-scrollbar-thumb {
+  background: #0f3460;
+  border-radius: 4px;
+}
+
+.info-panel::-webkit-scrollbar-thumb:hover {
+  background: #667eea;
+}
