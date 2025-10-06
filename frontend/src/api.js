@@ -93,3 +93,12 @@ export const fetchBatchTrajectories = async ({
   const response = await api.post('/api/trajectories/batch', data)
   return response.data
 }
+
+export const fetchPlanetPositions = async (time = null, planets = null) => {
+  const params = {}
+  if (time !== null) params.time = time
+  if (planets !== null) params.planets = planets
+  
+  const response = await api.get('/api/planets/positions', { params })
+  return response.data
+}

@@ -1,0 +1,230 @@
+.unified-selector {
+  background: rgba(0, 0, 0, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  padding: 15px;
+  color: white;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.selector-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.selector-header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.mode-toggle {
+  padding: 6px 12px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 4px;
+  color: white;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.2s;
+}
+
+.mode-toggle:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.mode-toggle.multi {
+  background: rgba(68, 68, 255, 0.3);
+  border-color: rgba(68, 68, 255, 0.5);
+}
+
+.category-selector {
+  margin-bottom: 12px;
+}
+
+.category-selector label {
+  display: block;
+  margin-bottom: 5px;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.category-selector select {
+  width: 100%;
+  padding: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 4px;
+  color: white;
+  font-size: 13px;
+}
+
+.category-selector select:focus {
+  outline: none;
+  border-color: rgba(68, 68, 255, 0.8);
+}
+
+.selection-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  padding: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 4px;
+}
+
+.selection-count {
+  background: rgba(68, 68, 255, 0.3);
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: bold;
+}
+
+.action-buttons-inline {
+  display: flex;
+  gap: 6px;
+}
+
+.btn-small {
+  padding: 4px 10px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 4px;
+  color: white;
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.btn-small:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.btn-small:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-small.btn-primary {
+  background: rgba(68, 68, 255, 0.4);
+  border-color: rgba(68, 68, 255, 0.6);
+  font-weight: 600;
+}
+
+.btn-small.btn-primary:hover:not(:disabled) {
+  background: rgba(68, 68, 255, 0.6);
+}
+
+.loading-indicator,
+.error-message,
+.no-objects {
+  text-align: center;
+  padding: 15px;
+  font-size: 13px;
+}
+
+.error-message {
+  color: #ff4444;
+}
+
+.no-objects {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.objects-list {
+  flex: 1;
+  overflow-y: auto;
+  margin-top: 8px;
+}
+
+.object-item {
+  display: flex;
+  align-items: center;
+  padding: 10px;
+  margin-bottom: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.object-item:hover:not(.disabled) {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.object-item.selected {
+  background: rgba(68, 68, 255, 0.2);
+  border: 1px solid rgba(68, 68, 255, 0.5);
+}
+
+.object-item.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.object-checkbox {
+  margin-right: 10px;
+  display: flex;
+  align-items: center;
+}
+
+.object-checkbox input[type="checkbox"] {
+  cursor: pointer;
+  width: 16px;
+  height: 16px;
+}
+
+.object-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.object-name {
+  font-weight: bold;
+  font-size: 13px;
+  margin-bottom: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.object-details {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.7);
+  display: flex;
+  gap: 8px;
+}
+
+.object-details.error {
+  color: #ff4444;
+}
+
+.object-details span {
+  white-space: nowrap;
+}
+
+/* Scrollbar styling */
+.objects-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.objects-list::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 4px;
+}
+
+.objects-list::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+}
+
+.objects-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}

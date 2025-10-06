@@ -1,9 +1,8 @@
 import { useState, useEffect } from 'react'
 import SolarSystem from './components/SolarSystem'
-import Controls from './components/Controls'
 import InfoPanel from './components/InfoPanel'
 import Dashboard from './components/Dashboard'
-import MultiObjectSelector from './components/MultiObjectSelector'
+import UnifiedObjectSelector from './components/UnifiedObjectSelector'
 import { fetchComets, fetchTrajectory, fetchBatchTrajectories } from './api'
 import './App.css'
 
@@ -156,7 +155,31 @@ function App() {
         parallel: true
       })
       
-      setBatchTrajectories(data.trajectories || {})
+      // Normalize batch trajectory data structure to match single trajectory format
+      const normalizedTrajectories = {}
+      if (data.trajectories) {
+        Object.keys(data.trajectories).forEach(designation => {
+          const traj = data.trajectories[designation]
+          if (traj && traj.points) {
+            // Convert 'points' to 'trajectory' and add missing fields
+            normalizedTrajectories[designation] = {
+              ...traj,
+              trajectory: traj.points.map((point, idx) => ({
+                ...point,
+                days_from_epoch: idx * (days / points),
+                distance_from_sun: Math.sqrt(
+                  point.position.x ** 2 + 
+                  point.position.y ** 2 + 
+                  point.position.z ** 2
+                )
+              })),
+              method: method
+            }
+          }
+        })
+      }
+      
+      setBatchTrajectories(normalizedTrajectories)
       
       if (data.errors && Object.keys(data.errors).length > 0) {
         console.warn('Some trajectories failed:', data.errors)
@@ -174,7 +197,7 @@ function App() {
     if (multiObjectMode && selectedObjects.length > 0) {
       loadBatchTrajectories()
     }
-  }, [selectedObjects, days, points, method])
+  }, [multiObjectMode, selectedObjects, days, points, method])
 
   if (view === 'dashboard') {
     return <Dashboard onBack={() => setView('visualization')} />
@@ -226,28 +249,59 @@ function App() {
 
       <div className="app-content">
         <div className="left-panel">
-          <Controls
-            comets={comets}
-            selectedComet={selectedComet}
-            onCometSelect={handleCometSelect}
-            days={days}
-            onDaysChange={handleDaysChange}
-            points={points}
-            onPointsChange={handlePointsChange}
-            method={method}
-            onMethodChange={handleMethodChange}
-            compareMode={compareMode}
-            onCompareModeToggle={handleCompareModeToggle}
-            multiObjectMode={multiObjectMode}
-            onMultiObjectToggle={handleMultiObjectToggle}
+          <UnifiedObjectSelector
+            multiMode={multiObjectMode}
+            onToggleMode={handleMultiObjectToggle}
+            selectedObject={selectedComet}
+            onSelectObject={handleCometSelect}
+            selectedObjects={selectedObjects}
+            onSelectMultiple={handleObjectsSelected}
+            onFetchMultiple={loadBatchTrajectories}
+            onClearSelection={() => setSelectedObjects([])}
           />
           
-          {multiObjectMode && (
-            <MultiObjectSelector
-              onObjectsSelected={handleObjectsSelected}
-              selectedObjects={selectedObjects}
-            />
-          )}
+          <div className="controls-section">
+            <h3>Trajectory Parameters</h3>
+            <div className="control-group">
+              <label>Days: {days}</label>
+              <input
+                type="range"
+                min="30"
+                max="3650"
+                value={days}
+                onChange={(e) => handleDaysChange(Number(e.target.value))}
+              />
+            </div>
+            <div className="control-group">
+              <label>Points: {points}</label>
+              <input
+                type="range"
+                min="50"
+                max="500"
+                value={points}
+                onChange={(e) => handlePointsChange(Number(e.target.value))}
+              />
+            </div>
+            <div className="control-group">
+              <label>Method:</label>
+              <select value={method} onChange={(e) => handleMethodChange(e.target.value)}>
+                <option value="twobody">Two-Body</option>
+                <option value="nbody">N-Body</option>
+              </select>
+            </div>
+            {!multiObjectMode && (
+              <div className="control-group">
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={compareMode}
+                    onChange={handleCompareModeToggle}
+                  />
+                  Compare Methods
+                </label>
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="visualization">
