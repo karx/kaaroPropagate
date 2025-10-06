@@ -13,8 +13,11 @@ from ..data.spice_loader import get_planet_position_spice
 
 
 # Gravitational parameter (GM) in AU³/day²
-# Using normalized units where GM_sun = 1.0 for consistency with two-body propagator
-GM_SUN = 1.0  # AU³/day² (normalized)
+# GM_sun = 1.32712440018e20 m³/s²
+# Converted to AU³/day²:
+# = 1.32712440018e20 / (1.495978707e11)³ * (86400)²
+# = 0.0002959122082855911 AU³/day²
+GM_SUN = 0.0002959122082855911  # AU³/day²
 
 # Planetary masses (relative to Sun)
 PLANET_MASSES = {

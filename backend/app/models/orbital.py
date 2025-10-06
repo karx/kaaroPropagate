@@ -201,13 +201,20 @@ def keplerian_to_cartesian(elements: KeplerianElements,
     x_orb = r * np.cos(nu)
     y_orb = r * np.sin(nu)
     
-    # Velocity in orbital plane (using vis-viva equation)
-    mu = 1.0  # GM_sun in AU³/day² (normalized)
-    v = np.sqrt(mu * (2/r - 1/a))
+    # Velocity in orbital plane
+    # Gravitational parameter (GM) in AU³/day²
+    # GM_sun = 1.32712440018e20 m³/s²
+    # Converted to AU³/day²:
+    # = 1.32712440018e20 / (1.495978707e11)³ * (86400)²
+    # = 0.0002959122082855911 AU³/day²
+    mu = 0.0002959122082855911  # GM_sun in AU³/day²
     
-    # Velocity components in orbital plane
-    vx_orb = -v * np.sin(E) * np.sqrt(mu / a)
-    vy_orb = v * np.cos(E) * np.sqrt(mu / a) * np.sqrt(1 - e**2)
+    # Velocity components in orbital plane (from orbital mechanics)
+    # vx = -sqrt(mu/a) * sin(E)
+    # vy = sqrt(mu/a) * sqrt(1-e²) * cos(E)
+    n = np.sqrt(mu / (a ** 3))  # Mean motion
+    vx_orb = -(a * n * np.sin(E)) / (1 - e * np.cos(E))
+    vy_orb = (a * n * np.sqrt(1 - e**2) * np.cos(E)) / (1 - e * np.cos(E))
     
     # Rotation matrices for coordinate transformation
     # From orbital plane to ecliptic reference frame
