@@ -7,7 +7,11 @@ export default function Controls({
   days,
   onDaysChange,
   points,
-  onPointsChange
+  onPointsChange,
+  method,
+  onMethodChange,
+  compareMode,
+  onCompareModeToggle
 }) {
   return (
     <div className="controls">
@@ -31,6 +35,42 @@ export default function Controls({
               )}
             </button>
           ))}
+        </div>
+      </div>
+
+      <div className="controls-section">
+        <h3>⚙️ Propagation Method</h3>
+        <div className="control-group">
+          <label>
+            Method:
+            <select
+              value={method}
+              onChange={(e) => onMethodChange(e.target.value)}
+              className="method-select"
+            >
+              <option value="twobody">Two-Body (Fast)</option>
+              <option value="nbody">N-Body (Accurate)</option>
+            </select>
+          </label>
+          <div className="control-hint">
+            {method === 'twobody' 
+              ? 'Keplerian orbit (Sun only)' 
+              : 'Includes planetary perturbations'}
+          </div>
+        </div>
+
+        <div className="control-group">
+          <label className="compare-toggle">
+            <input
+              type="checkbox"
+              checked={compareMode}
+              onChange={onCompareModeToggle}
+            />
+            <span>Compare Methods</span>
+          </label>
+          <div className="control-hint">
+            Show both two-body and N-body trajectories
+          </div>
         </div>
       </div>
 

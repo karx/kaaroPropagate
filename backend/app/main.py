@@ -4,15 +4,71 @@ FastAPI application for Comet Trajectory Visualization API.
 Provides REST endpoints for comet data and trajectory calculations.
 """
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 from typing import List, Optional
 import numpy as np
+import logging
+import sys
+import time
+from datetime import datetime
 
 from .data.ingestion import load_mpc_data
 from .core.integration import build_catalog_from_mpc
 from .models.comet import CometCatalog
 from .physics.propagator import TwoBodyPropagator
+from .physics.nbody import NBodyPropagator
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+logger = logging.getLogger(__name__)
+
+
+class RequestLoggingMiddleware(BaseHTTPMiddleware):
+    """Middleware to log all HTTP requests and responses."""
+    
+    async def dispatch(self, request: Request, call_next):
+        # Log request
+        start_time = time.time()
+        logger.info(f"Request: {request.method} {request.url.path}")
+        
+        # Track API requests
+        performance_metrics["api_requests"]["total"] += 1
+        endpoint = request.url.path
+        if endpoint not in performance_metrics["api_requests"]["by_endpoint"]:
+            performance_metrics["api_requests"]["by_endpoint"][endpoint] = 0
+        performance_metrics["api_requests"]["by_endpoint"][endpoint] += 1
+        
+        # Process request
+        try:
+            response = await call_next(request)
+            process_time = time.time() - start_time
+            
+            # Log response
+            logger.info(
+                f"Response: {request.method} {request.url.path} "
+                f"status={response.status_code} duration={process_time:.3f}s"
+            )
+            
+            # Add custom header with processing time
+            response.headers["X-Process-Time"] = str(process_time)
+            return response
+            
+        except Exception as e:
+            process_time = time.time() - start_time
+            logger.error(
+                f"Request failed: {request.method} {request.url.path} "
+                f"error={str(e)} duration={process_time:.3f}s",
+                exc_info=True
+            )
+            raise
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -20,6 +76,9 @@ app = FastAPI(
     description="API for comet orbital data and trajectory calculations",
     version="1.0.0"
 )
+
+# Add middleware
+app.add_middleware(RequestLoggingMiddleware)
 
 # Configure CORS
 app.add_middleware(
@@ -33,15 +92,115 @@ app.add_middleware(
 # Global catalog (loaded on startup)
 catalog: Optional[CometCatalog] = None
 
+# Performance metrics
+performance_metrics = {
+    "trajectory_calculations": {
+        "total": 0,
+        "twobody": {"count": 0, "total_time": 0.0, "avg_time": 0.0},
+        "nbody": {"count": 0, "total_time": 0.0, "avg_time": 0.0}
+    },
+    "api_requests": {
+        "total": 0,
+        "by_endpoint": {}
+    },
+    "errors": {
+        "total": 0,
+        "by_type": {},
+        "recent": []  # Last 10 errors
+    }
+}
+
+
+def log_error(error_type: str, message: str, details: dict = None):
+    """Log an error and update error metrics."""
+    performance_metrics["errors"]["total"] += 1
+    
+    if error_type not in performance_metrics["errors"]["by_type"]:
+        performance_metrics["errors"]["by_type"][error_type] = 0
+    performance_metrics["errors"]["by_type"][error_type] += 1
+    
+    error_entry = {
+        "timestamp": datetime.now().isoformat(),
+        "type": error_type,
+        "message": message,
+        "details": details or {}
+    }
+    
+    performance_metrics["errors"]["recent"].append(error_entry)
+    if len(performance_metrics["errors"]["recent"]) > 10:
+        performance_metrics["errors"]["recent"].pop(0)
+    
+    logger.error(f"{error_type}: {message}", extra=details or {})
+
 
 @app.on_event("startup")
 async def startup_event():
     """Load comet data on application startup."""
     global catalog
-    print("Loading comet data...")
-    mpc_elements = load_mpc_data()
-    catalog = build_catalog_from_mpc(mpc_elements)
-    print(f"Loaded {len(catalog)} comets")
+    logger.info("Starting Comet Trajectory API")
+    logger.info("Loading comet data from MPC...")
+    
+    try:
+        mpc_elements = load_mpc_data()
+        catalog = build_catalog_from_mpc(mpc_elements)
+        logger.info(f"Successfully loaded {len(catalog)} comets")
+        
+        # Log statistics
+        periodic = sum(1 for c in catalog.comets if c.is_periodic)
+        hyperbolic = sum(1 for c in catalog.comets if c.is_hyperbolic)
+        logger.info(f"Catalog breakdown: {periodic} periodic, {hyperbolic} hyperbolic")
+    except Exception as e:
+        logger.error(f"Failed to load comet data: {e}", exc_info=True)
+        raise
+
+
+@app.get("/health")
+async def health_check():
+    """
+    Health check endpoint for monitoring.
+    
+    Returns system status and basic diagnostics.
+    """
+    try:
+        # Check if catalog is loaded
+        catalog_status = "healthy" if catalog and len(catalog) > 0 else "unhealthy"
+        
+        # Check SPICE availability
+        spice_status = "unknown"
+        try:
+            from .data.spice_loader import SPICELoader
+            spice_loader = SPICELoader()
+            spice_status = "available" if spice_loader.is_loaded else "unavailable"
+        except Exception:
+            spice_status = "unavailable"
+        
+        overall_status = "healthy" if catalog_status == "healthy" else "degraded"
+        
+        return {
+            "status": overall_status,
+            "timestamp": datetime.now().isoformat(),
+            "components": {
+                "catalog": {
+                    "status": catalog_status,
+                    "comets_loaded": len(catalog) if catalog else 0
+                },
+                "spice": {
+                    "status": spice_status
+                }
+            },
+            "metrics": {
+                "total_requests": performance_metrics["api_requests"]["total"],
+                "total_calculations": performance_metrics["trajectory_calculations"]["total"],
+                "total_errors": performance_metrics["errors"]["total"]
+            }
+        }
+    except Exception as e:
+        logger.error(f"Health check failed: {e}", exc_info=True)
+        return {
+            "status": "unhealthy",
+            "timestamp": datetime.now().isoformat(),
+            "error": str(e)
+        }
 
 
 @app.get("/")
@@ -182,7 +341,8 @@ async def get_comet(designation: str):
 async def get_trajectory(
     designation: str,
     days: int = Query(365, ge=1, le=3650, description="Number of days to calculate"),
-    points: int = Query(100, ge=10, le=1000, description="Number of trajectory points")
+    points: int = Query(100, ge=10, le=1000, description="Number of trajectory points"),
+    method: str = Query("twobody", regex="^(twobody|nbody)$", description="Propagation method")
 ):
     """
     Calculate comet trajectory over time.
@@ -190,6 +350,7 @@ async def get_trajectory(
     - **designation**: Comet designation
     - **days**: Number of days from epoch to calculate (1-3650)
     - **points**: Number of trajectory points (10-1000)
+    - **method**: Propagation method ('twobody' or 'nbody')
     """
     if not catalog:
         raise HTTPException(status_code=503, detail="Catalog not loaded")
@@ -202,18 +363,40 @@ async def get_trajectory(
             break
     
     if not comet:
+        log_error("CometNotFound", f"Comet {designation} not found", {"designation": designation})
         raise HTTPException(status_code=404, detail=f"Comet {designation} not found")
     
     if not comet.elements:
+        log_error("MissingOrbitalElements", f"Comet {designation} has no orbital elements", {"designation": designation})
         raise HTTPException(status_code=400, detail="Comet has no orbital elements")
     
     # Calculate trajectory
     try:
-        propagator = TwoBodyPropagator(comet.elements)
         start_time = comet.elements.epoch
         end_time = start_time + days
         
+        logger.info(f"Calculating trajectory for {designation} using {method} method: {days} days, {points} points")
+        calc_start = datetime.now()
+        
+        # Choose propagator based on method
+        if method == "nbody":
+            propagator = NBodyPropagator(comet.elements, planets=['jupiter', 'saturn'], use_spice=True)
+        else:
+            propagator = TwoBodyPropagator(comet.elements)
+        
         positions, times = propagator.get_trajectory(start_time, end_time, points)
+        
+        calc_time = (datetime.now() - calc_start).total_seconds()
+        logger.info(f"Trajectory calculation completed in {calc_time:.3f}s")
+        
+        # Update performance metrics
+        performance_metrics["trajectory_calculations"]["total"] += 1
+        performance_metrics["trajectory_calculations"][method]["count"] += 1
+        performance_metrics["trajectory_calculations"][method]["total_time"] += calc_time
+        performance_metrics["trajectory_calculations"][method]["avg_time"] = (
+            performance_metrics["trajectory_calculations"][method]["total_time"] /
+            performance_metrics["trajectory_calculations"][method]["count"]
+        )
         
         # Convert to response format
         trajectory_points = []
@@ -232,6 +415,7 @@ async def get_trajectory(
         return {
             "designation": comet.designation,
             "name": comet.name,
+            "method": method,
             "start_time": float(start_time),
             "end_time": float(end_time),
             "days": days,
@@ -240,6 +424,17 @@ async def get_trajectory(
         }
         
     except Exception as e:
+        log_error(
+            "TrajectoryCalculationError",
+            f"Error calculating trajectory for {designation}",
+            {
+                "designation": designation,
+                "method": method,
+                "days": days,
+                "points": points,
+                "error": str(e)
+            }
+        )
         raise HTTPException(status_code=500, detail=f"Error calculating trajectory: {str(e)}")
 
 
@@ -267,9 +462,11 @@ async def get_position(
             break
     
     if not comet:
+        log_error("CometNotFound", f"Comet {designation} not found", {"designation": designation})
         raise HTTPException(status_code=404, detail=f"Comet {designation} not found")
     
     if not comet.elements:
+        log_error("MissingOrbitalElements", f"Comet {designation} has no orbital elements", {"designation": designation})
         raise HTTPException(status_code=400, detail="Comet has no orbital elements")
     
     # Determine time
@@ -306,6 +503,122 @@ async def get_position(
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error calculating position: {str(e)}")
+
+
+@app.get("/metrics")
+async def get_metrics():
+    """
+    Get API performance metrics.
+    
+    Returns statistics about API usage, performance, and errors.
+    """
+    return {
+        "trajectory_calculations": performance_metrics["trajectory_calculations"],
+        "api_requests": performance_metrics["api_requests"],
+        "errors": {
+            "total": performance_metrics["errors"]["total"],
+            "by_type": performance_metrics["errors"]["by_type"],
+            "recent_count": len(performance_metrics["errors"]["recent"])
+        },
+        "catalog_size": len(catalog) if catalog else 0
+    }
+
+
+@app.get("/metrics/errors")
+async def get_error_details():
+    """
+    Get detailed error information including recent errors.
+    
+    Returns the last 10 errors with full details.
+    """
+    return {
+        "total_errors": performance_metrics["errors"]["total"],
+        "by_type": performance_metrics["errors"]["by_type"],
+        "recent_errors": performance_metrics["errors"]["recent"]
+    }
+
+
+@app.get("/dashboard")
+async def get_dashboard_data():
+    """
+    Get comprehensive dashboard data for monitoring UI.
+    
+    Returns all metrics, health status, and system information in one call.
+    """
+    try:
+        # Calculate derived metrics
+        total_calc = performance_metrics["trajectory_calculations"]["total"]
+        twobody_count = performance_metrics["trajectory_calculations"]["twobody"]["count"]
+        nbody_count = performance_metrics["trajectory_calculations"]["nbody"]["count"]
+        
+        twobody_pct = (twobody_count / total_calc * 100) if total_calc > 0 else 0
+        nbody_pct = (nbody_count / total_calc * 100) if total_calc > 0 else 0
+        
+        total_requests = performance_metrics["api_requests"]["total"]
+        total_errors = performance_metrics["errors"]["total"]
+        error_rate = (total_errors / total_requests * 100) if total_requests > 0 else 0
+        
+        # Check SPICE status
+        spice_status = "unknown"
+        try:
+            from .data.spice_loader import SPICELoader
+            spice_loader = SPICELoader()
+            spice_status = "available" if spice_loader.is_loaded else "unavailable"
+        except Exception:
+            spice_status = "unavailable"
+        
+        # System health
+        catalog_healthy = catalog and len(catalog) > 0
+        overall_health = "healthy" if catalog_healthy and error_rate < 10 else "degraded"
+        if not catalog_healthy:
+            overall_health = "unhealthy"
+        
+        return {
+            "timestamp": datetime.now().isoformat(),
+            "health": {
+                "status": overall_health,
+                "catalog_loaded": catalog_healthy,
+                "catalog_size": len(catalog) if catalog else 0,
+                "spice_available": spice_status == "available"
+            },
+            "kpis": {
+                "total_requests": total_requests,
+                "total_calculations": total_calc,
+                "total_errors": total_errors,
+                "error_rate_percent": round(error_rate, 2)
+            },
+            "calculations": {
+                "total": total_calc,
+                "twobody": {
+                    "count": twobody_count,
+                    "percentage": round(twobody_pct, 1),
+                    "avg_time_ms": round(performance_metrics["trajectory_calculations"]["twobody"]["avg_time"] * 1000, 2),
+                    "total_time_s": round(performance_metrics["trajectory_calculations"]["twobody"]["total_time"], 3)
+                },
+                "nbody": {
+                    "count": nbody_count,
+                    "percentage": round(nbody_pct, 1),
+                    "avg_time_ms": round(performance_metrics["trajectory_calculations"]["nbody"]["avg_time"] * 1000, 2),
+                    "total_time_s": round(performance_metrics["trajectory_calculations"]["nbody"]["total_time"], 3)
+                }
+            },
+            "requests": {
+                "total": total_requests,
+                "by_endpoint": performance_metrics["api_requests"]["by_endpoint"]
+            },
+            "errors": {
+                "total": total_errors,
+                "by_type": performance_metrics["errors"]["by_type"],
+                "recent": performance_metrics["errors"]["recent"][-5:]  # Last 5 errors
+            }
+        }
+    except Exception as e:
+        logger.error(f"Error generating dashboard data: {e}", exc_info=True)
+        return {
+            "timestamp": datetime.now().isoformat(),
+            "error": str(e),
+            "health": {"status": "unhealthy"}
+        }
 
 
 @app.get("/statistics")

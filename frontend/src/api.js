@@ -21,9 +21,9 @@ export const fetchComet = async (designation) => {
   return response.data
 }
 
-export const fetchTrajectory = async (designation, days = 365, points = 100) => {
+export const fetchTrajectory = async (designation, days = 365, points = 100, method = 'twobody') => {
   const response = await api.get(`/comets/${designation}/trajectory`, {
-    params: { days, points }
+    params: { days, points, method }
   })
   return response.data
 }

@@ -80,3 +80,88 @@
 .info-panel::-webkit-scrollbar-thumb:hover {
   background: #667eea;
 }
+
+/* Data Source Badge */
+.data-source-badge {
+  background: linear-gradient(135deg, #1f2f4f 0%, #16213e 100%);
+  border: 2px solid #667eea;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.badge-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #0f3460;
+}
+
+.badge-icon {
+  font-size: 20px;
+}
+
+.badge-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #667eea;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.badge-content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.badge-item {
+  font-size: 13px;
+  color: #ccc;
+  line-height: 1.5;
+}
+
+.badge-item strong {
+  color: #fff;
+  font-weight: 600;
+}
+
+.calculated-badge {
+  display: inline-block;
+  background: #667eea;
+  color: #fff;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+/* Help Boxes */
+.help-box {
+  background: #16213e;
+  border-left: 3px solid #667eea;
+  border-radius: 6px;
+  padding: 12px;
+  margin-bottom: 12px;
+}
+
+.help-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #667eea;
+  margin-bottom: 8px;
+}
+
+.help-box .info-text {
+  margin: 6px 0;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.help-box .info-text strong {
+  color: #fff;
+  font-weight: 600;
+}

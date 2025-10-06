@@ -2,10 +2,12 @@ import { useState, useEffect } from 'react'
 import SolarSystem from './components/SolarSystem'
 import Controls from './components/Controls'
 import InfoPanel from './components/InfoPanel'
+import Dashboard from './components/Dashboard'
 import { fetchComets, fetchTrajectory } from './api'
 import './App.css'
 
 function App() {
+  const [view, setView] = useState('visualization') // 'visualization' or 'dashboard'
   const [comets, setComets] = useState([])
   const [selectedComet, setSelectedComet] = useState(null)
   const [trajectory, setTrajectory] = useState(null)
@@ -13,6 +15,9 @@ function App() {
   const [error, setError] = useState(null)
   const [days, setDays] = useState(365)
   const [points, setPoints] = useState(100)
+  const [method, setMethod] = useState('twobody')
+  const [compareMode, setCompareMode] = useState(false)
+  const [trajectoryNbody, setTrajectoryNbody] = useState(null)
 
   // Load comets on mount
   useEffect(() => {
@@ -23,8 +28,11 @@ function App() {
   useEffect(() => {
     if (selectedComet) {
       loadTrajectory(selectedComet.designation)
+      if (compareMode) {
+        loadComparisonTrajectory(selectedComet.designation)
+      }
     }
-  }, [selectedComet, days, points])
+  }, [selectedComet, days, points, method, compareMode])
 
   const loadComets = async () => {
     try {
@@ -48,11 +56,22 @@ function App() {
   const loadTrajectory = async (designation) => {
     try {
       setError(null)
-      const data = await fetchTrajectory(designation, days, points)
+      const data = await fetchTrajectory(designation, days, points, method)
       setTrajectory(data)
     } catch (err) {
       setError('Failed to load trajectory: ' + err.message)
       console.error(err)
+    }
+  }
+
+  const loadComparisonTrajectory = async (designation) => {
+    try {
+      // Load the opposite method for comparison
+      const comparisonMethod = method === 'twobody' ? 'nbody' : 'twobody'
+      const data = await fetchTrajectory(designation, days, points, comparisonMethod)
+      setTrajectoryNbody(data)
+    } catch (err) {
+      console.error('Failed to load comparison trajectory:', err)
     }
   }
 
@@ -67,6 +86,23 @@ function App() {
 
   const handlePointsChange = (newPoints) => {
     setPoints(newPoints)
+  }
+
+  const handleMethodChange = (newMethod) => {
+    setMethod(newMethod)
+  }
+
+  const handleCompareModeToggle = () => {
+    setCompareMode(!compareMode)
+    if (!compareMode && selectedComet) {
+      loadComparisonTrajectory(selectedComet.designation)
+    } else {
+      setTrajectoryNbody(null)
+    }
+  }
+
+  if (view === 'dashboard') {
+    return <Dashboard onBack={() => setView('visualization')} />
   }
 
   if (loading) {
@@ -86,8 +122,25 @@ function App() {
   return (
     <div className="app">
       <header className="app-header">
-        <h1>🌠 Comet Trajectory Visualization</h1>
-        <p>Exploring {comets.length} comets in our solar system</p>
+        <div>
+          <h1>🌠 Comet Trajectory Visualization</h1>
+          <p>Exploring {comets.length} comets in our solar system</p>
+        </div>
+        <button 
+          onClick={() => setView('dashboard')}
+          style={{
+            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+            border: 'none',
+            padding: '10px 20px',
+            borderRadius: '8px',
+            color: 'white',
+            fontWeight: '600',
+            cursor: 'pointer',
+            fontSize: '14px'
+          }}
+        >
+          📊 Dashboard
+        </button>
       </header>
 
       {error && (
@@ -105,10 +158,17 @@ function App() {
           onDaysChange={handleDaysChange}
           points={points}
           onPointsChange={handlePointsChange}
+          method={method}
+          onMethodChange={handleMethodChange}
+          compareMode={compareMode}
+          onCompareModeToggle={handleCompareModeToggle}
         />
 
         <div className="visualization">
-          <SolarSystem trajectory={trajectory} />
+          <SolarSystem 
+            trajectory={trajectory} 
+            trajectoryComparison={compareMode ? trajectoryNbody : null}
+          />
         </div>
 
         <InfoPanel

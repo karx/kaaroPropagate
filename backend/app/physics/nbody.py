@@ -7,8 +7,9 @@ from major planets (Jupiter, Saturn, Uranus, Neptune).
 
 import numpy as np
 from scipy.integrate import solve_ivp
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 from ..models.orbital import KeplerianElements, StateVector
+from ..data.spice_loader import get_planet_position_spice
 
 
 # Gravitational parameter (GM) in AU³/day²
@@ -81,17 +82,25 @@ def solve_kepler(M: float, e: float, tol: float = 1e-10) -> float:
     return E
 
 
-def get_planet_position(planet_name: str, time: float) -> np.ndarray:
+def get_planet_position(planet_name: str, time: float, use_spice: bool = True) -> np.ndarray:
     """
-    Calculate planet position at given time using simplified orbital elements.
+    Calculate planet position at given time.
     
     Args:
         planet_name: Name of planet ('jupiter', 'saturn', 'uranus', 'neptune')
         time: Julian Date
+        use_spice: If True, try to use SPICE kernels for accurate positions
         
     Returns:
         Position vector [x, y, z] in AU
     """
+    # Try SPICE first if requested
+    if use_spice:
+        spice_pos = get_planet_position_spice(planet_name.upper(), time)
+        if spice_pos is not None:
+            return spice_pos
+    
+    # Fall back to simplified orbital elements
     elem = PLANET_ELEMENTS[planet_name]
     
     # Time since J2000
@@ -142,7 +151,7 @@ def get_planet_position(planet_name: str, time: float) -> np.ndarray:
 
 
 def nbody_derivatives(t: float, state: np.ndarray, 
-                     planets: List[str]) -> np.ndarray:
+                     planets: List[str], use_spice: bool = True) -> np.ndarray:
     """
     Calculate derivatives for N-body problem.
     
@@ -167,8 +176,8 @@ def nbody_derivatives(t: float, state: np.ndarray,
     # Acceleration from planets
     acc_planets = np.zeros(3)
     for planet_name in planets:
-        # Get planet position
-        planet_pos = get_planet_position(planet_name, t)
+        # Get planet position (using SPICE if available)
+        planet_pos = get_planet_position(planet_name, t, use_spice=use_spice)
         
         # Vector from comet to planet
         r_cp = planet_pos - pos
@@ -201,16 +210,19 @@ class NBodyPropagator:
     """
     
     def __init__(self, elements: KeplerianElements, 
-                 planets: List[str] = None):
+                 planets: List[str] = None,
+                 use_spice: bool = True):
         """
         Initialize N-body propagator.
         
         Args:
             elements: Initial orbital elements
             planets: List of planets to include (default: Jupiter, Saturn)
+            use_spice: Use SPICE kernels for accurate planetary positions
         """
         self.elements = elements
         self.planets = planets or ['jupiter', 'saturn']
+        self.use_spice = use_spice
         
         # Convert initial elements to state vector
         from .propagator import TwoBodyPropagator
@@ -238,7 +250,7 @@ class NBodyPropagator:
         
         # Integrate equations of motion
         solution = solve_ivp(
-            fun=lambda t, y: nbody_derivatives(t, y, self.planets),
+            fun=lambda t, y: nbody_derivatives(t, y, self.planets, self.use_spice),
             t_span=t_span,
             y0=self.initial_state,
             method='DOP853',  # High-order Runge-Kutta
@@ -284,7 +296,7 @@ class NBodyPropagator:
         else:
             # Propagate to start_time
             temp_solution = solve_ivp(
-                fun=lambda t, y: nbody_derivatives(t, y, self.planets),
+                fun=lambda t, y: nbody_derivatives(t, y, self.planets, self.use_spice),
                 t_span=(self.initial_time, start_time),
                 y0=self.initial_state,
                 method='DOP853',
@@ -295,7 +307,7 @@ class NBodyPropagator:
         
         # Integrate over requested range
         solution = solve_ivp(
-            fun=lambda t, y: nbody_derivatives(t, y, self.planets),
+            fun=lambda t, y: nbody_derivatives(t, y, self.planets, self.use_spice),
             t_span=t_span,
             y0=y0,
             method='DOP853',

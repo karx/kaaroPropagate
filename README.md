@@ -4,23 +4,26 @@ An interactive 3D solar system viewer that accurately plots the positions and fu
 
 ## Features
 
-- **Real Data**: Ingests data from Minor Planet Center (MPC) and JPL Small-Body Database
-- **Accurate Physics**: Implements orbital propagation with two-body and N-body models
-- **3D Visualization**: Interactive WebGL-based solar system viewer
-- **Time Travel**: Scrub through time to see past and future comet positions
-- **Detailed Information**: View orbital parameters and physical characteristics
+- **Real Data**: Ingests data from Minor Planet Center (MPC) with 1,141 comets
+- **Accurate Physics**: Choose between fast two-body or accurate N-body propagation with planetary perturbations
+- **SPICE Integration**: Uses JPL DE440 ephemeris for high-precision planetary positions
+- **3D Visualization**: Interactive WebGL-based solar system viewer with planetary orbits
+- **Method Comparison**: Switch between two-body and N-body methods to see the difference
+- **Detailed Information**: View orbital parameters and trajectory statistics
 
 ## Project Status
 
-✅ **Web UI Complete!** - See [WEB_UI_COMPLETE.md](WEB_UI_COMPLETE.md) for details
+✅ **Phase 2 Complete!** - N-body propagation with SPICE integration
 
 - [x] Technical design and architecture
 - [x] Project structure setup
 - [x] Data ingestion module (MPC parser) - 1,141 comets loaded
-- [x] Orbital propagation engine - Two-body propagation working
+- [x] Orbital propagation engine - Two-body and N-body methods ✨
+- [x] SPICE integration - JPL DE440 ephemeris for planetary positions ✨
 - [x] Integration testing - All tests passing
-- [x] Backend API - FastAPI with REST endpoints ✨
-- [x] Frontend visualization - React + Three.js 3D viewer ✨
+- [x] Backend API - FastAPI with method selection endpoint ✨
+- [x] Frontend visualization - React + Three.js with planetary orbits ✨
+- [x] Method comparison UI - Toggle between two-body and N-body ✨
 
 🚀 **Live Demo**: [Frontend](https://5173--0199ad84-7027-76e5-80a1-b3d96a8105a5.us-east-1-01.gitpod.dev) | [API](https://8000--0199ad84-7027-76e5-80a1-b3d96a8105a5.us-east-1-01.gitpod.dev)
 
@@ -60,25 +63,28 @@ See [TECHNICAL_DESIGN.md](TECHNICAL_DESIGN.md) for detailed architecture documen
 
 ## Development Phases
 
-### Phase 1: MVP (Current)
+### Phase 1: MVP ✅
 - MPC data parser
 - Basic two-body orbital propagation
 - CLI testing interface
 
-### Phase 2: Core Engine
-- Poliastro integration
-- N-body perturbations
-- JPL SPICE kernel support
+### Phase 2: Core Engine ✅
+- Custom N-body propagator with DOP853 integrator
+- Planetary perturbations (Jupiter, Saturn, Uranus, Neptune)
+- JPL SPICE kernel support with DE440 ephemeris
+- Method selection API endpoint
 
-### Phase 3: Visualization
-- FastAPI backend
+### Phase 3: Visualization ✅
+- FastAPI backend with trajectory endpoints
 - React + Three.js frontend
-- Interactive 3D viewer
+- Interactive 3D viewer with planetary orbits
+- Method comparison UI
 
-### Phase 4: Advanced Features
-- Non-gravitational forces
-- Performance optimization
-- Search and filtering
+### Phase 4: Advanced Features (Future)
+- Non-gravitational forces (radiation pressure, outgassing)
+- Performance optimization and caching
+- Search and filtering by orbital parameters
+- Time animation controls
 
 ## Data Sources
 
