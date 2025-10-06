@@ -238,6 +238,28 @@ class NBodyPropagator:
         ])
         self.initial_time = elements.epoch
     
+    @classmethod
+    def from_state_vector(cls, state: StateVector,
+                         planets: List[str] = None,
+                         use_spice: bool = True) -> 'NBodyPropagator':
+        """
+        Create N-body propagator from a state vector.
+        
+        Converts Cartesian state to Keplerian elements, then initializes
+        the propagator. Useful for continuing trajectories.
+        
+        Args:
+            state: State vector (position, velocity, time)
+            planets: List of planets to include (default: Jupiter, Saturn)
+            use_spice: Use SPICE kernels for accurate planetary positions
+            
+        Returns:
+            New N-body propagator initialized at the given state
+        """
+        from ..models.orbital import cartesian_to_keplerian
+        elements = cartesian_to_keplerian(state)
+        return cls(elements, planets=planets, use_spice=use_spice)
+    
     def propagate(self, time: float) -> StateVector:
         """
         Propagate orbit to specific time using N-body dynamics.

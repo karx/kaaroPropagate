@@ -416,6 +416,9 @@ async def get_trajectory(
                 "distance_from_sun": float(np.linalg.norm(pos))
             })
         
+        # Get final state for continuation support
+        final_state = propagator.propagate(end_time)
+        
         return {
             "designation": comet.designation,
             "name": comet.name,
@@ -424,7 +427,8 @@ async def get_trajectory(
             "end_time": float(end_time),
             "days": days,
             "points": len(trajectory_points),
-            "trajectory": trajectory_points
+            "trajectory": trajectory_points,
+            "final_state": final_state.to_dict()
         }
         
     except Exception as e:
@@ -984,6 +988,133 @@ async def calculate_batch_trajectories(request: BatchTrajectoryRequest):
         "not_found": not_found,
         "statistics": stats
     }
+
+
+@app.post("/trajectory/continue")
+async def continue_trajectory(request: dict):
+    """
+    Continue trajectory calculation from a given state vector.
+    
+    Enables infinite trajectory streaming by allowing continuation
+    from any point in the trajectory without recalculating from the beginning.
+    
+    Request body:
+    {
+        "state": {
+            "position": {"x": float, "y": float, "z": float},
+            "velocity": {"x": float, "y": float, "z": float},
+            "time": float (Julian Date)
+        },
+        "duration_days": float,
+        "num_points": int,
+        "method": "twobody" | "nbody"
+    }
+    
+    Returns:
+    {
+        "trajectory": [...],
+        "final_state": {...},
+        "continuation_info": {
+            "start_time": float,
+            "end_time": float,
+            "duration_days": float,
+            "points": int
+        }
+    }
+    """
+    try:
+        # Parse request
+        state_data = request.get("state")
+        duration_days = request.get("duration_days", 365)
+        num_points = request.get("num_points", 100)
+        method = request.get("method", "twobody")
+        
+        # Validate inputs
+        if not state_data:
+            raise HTTPException(status_code=400, detail="Missing 'state' in request body")
+        
+        if duration_days < 1 or duration_days > 3650:
+            raise HTTPException(status_code=400, detail="duration_days must be between 1 and 3650")
+        
+        if num_points < 10 or num_points > 1000:
+            raise HTTPException(status_code=400, detail="num_points must be between 10 and 1000")
+        
+        if method not in ["twobody", "nbody"]:
+            raise HTTPException(status_code=400, detail="method must be 'twobody' or 'nbody'")
+        
+        # Convert state dict to StateVector
+        from .models.orbital import StateVector
+        state = StateVector.from_dict(state_data)
+        
+        logger.info(f"Continuing trajectory from time {state.time} for {duration_days} days using {method}")
+        calc_start = datetime.now()
+        
+        # Create propagator from state vector
+        if method == "nbody":
+            # For N-body, we need to convert state to elements first
+            propagator = NBodyPropagator.from_state_vector(state)
+        else:
+            propagator = TwoBodyPropagator.from_state_vector(state)
+        
+        # Calculate continuation trajectory
+        end_time = state.time + duration_days
+        positions, times = propagator.get_trajectory(state.time, end_time, num_points)
+        
+        calc_time = (datetime.now() - calc_start).total_seconds()
+        logger.info(f"Continuation trajectory calculated in {calc_time:.3f}s")
+        
+        # Update metrics
+        performance_metrics["trajectory_calculations"]["total"] += 1
+        performance_metrics["trajectory_calculations"][method]["count"] += 1
+        performance_metrics["trajectory_calculations"][method]["total_time"] += calc_time
+        performance_metrics["trajectory_calculations"][method]["avg_time"] = (
+            performance_metrics["trajectory_calculations"][method]["total_time"] /
+            performance_metrics["trajectory_calculations"][method]["count"]
+        )
+        
+        # Build trajectory response
+        trajectory_points = []
+        for pos, time in zip(positions, times):
+            trajectory_points.append({
+                "time": float(time),
+                "position": {
+                    "x": float(pos[0]),
+                    "y": float(pos[1]),
+                    "z": float(pos[2])
+                },
+                "distance_from_sun": float(np.linalg.norm(pos))
+            })
+        
+        # Get final state for next continuation
+        final_state = propagator.propagate(end_time)
+        
+        return {
+            "trajectory": trajectory_points,
+            "final_state": final_state.to_dict(),
+            "continuation_info": {
+                "start_time": float(state.time),
+                "end_time": float(end_time),
+                "duration_days": float(duration_days),
+                "points": len(trajectory_points),
+                "method": method,
+                "calculation_time_seconds": calc_time
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        log_error(
+            "TrajectoryContinuationError",
+            f"Error continuing trajectory",
+            {
+                "error": str(e),
+                "method": request.get("method", "unknown"),
+                "duration_days": request.get("duration_days")
+            }
+        )
+        logger.error(f"Trajectory continuation failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error continuing trajectory: {str(e)}")
 
 
 if __name__ == "__main__":

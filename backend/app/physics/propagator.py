@@ -29,6 +29,24 @@ class TwoBodyPropagator:
         """
         self.elements = elements
     
+    @classmethod
+    def from_state_vector(cls, state: StateVector) -> 'TwoBodyPropagator':
+        """
+        Create propagator from a state vector.
+        
+        Converts Cartesian state to Keplerian elements for propagation.
+        Useful for continuing trajectories from arbitrary points.
+        
+        Args:
+            state: State vector (position, velocity, time)
+            
+        Returns:
+            New propagator initialized at the given state
+        """
+        from ..models.orbital import cartesian_to_keplerian
+        elements = cartesian_to_keplerian(state)
+        return cls(elements)
+    
     def propagate(self, time: float) -> StateVector:
         """
         Propagate orbit to a specific time.

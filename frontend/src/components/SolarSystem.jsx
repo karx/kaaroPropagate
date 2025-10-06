@@ -2,6 +2,8 @@ import { useRef, useMemo, useState, useEffect } from 'react'
 import { Canvas, useFrame, useLoader } from '@react-three/fiber'
 import { OrbitControls, Line } from '@react-three/drei'
 import * as THREE from 'three'
+import AutoLoadIndicator from './AutoLoadIndicator'
+import MultiObjectAutoLoadIndicator from './MultiObjectAutoLoadIndicator'
 
 // Create procedural textures for planets
 function createPlanetTexture(color, type = 'rocky', name = '') {
@@ -686,7 +688,11 @@ function AnimationControls({
   currentTimeIndex,
   onAnimationToggle,
   onAnimationSpeedChange,
-  onTimeIndexChange 
+  onTimeIndexChange,
+  autoLoadEnabled,
+  onAutoLoadToggle,
+  autoLoadState,
+  onAutoLoadSettings
 }) {
   // Determine if we're in batch mode and get a reference trajectory
   const referenceTrajectory = useMemo(() => {
@@ -705,7 +711,8 @@ function AnimationControls({
       onTimeIndexChange((prev) => {
         const maxIndex = referenceTrajectory.trajectory.length - 1
         if (prev >= maxIndex) {
-          return 0 // Loop back to start
+          // Loop back to start (auto-load will extend trajectory before we reach end)
+          return 0
         }
         return prev + 1
       })
@@ -766,7 +773,7 @@ function AnimationControls({
         />
         
         {/* Controls */}
-        <div style={{ display: 'flex', gap: '12px', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap' }}>
           <button
             onClick={onAnimationToggle}
             style={{
@@ -803,7 +810,73 @@ function AnimationControls({
               </button>
             ))}
           </div>
+          
+          {/* Auto-load toggle */}
+          {onAutoLoadToggle && (
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <button
+                onClick={onAutoLoadToggle}
+                style={{
+                  background: autoLoadEnabled ? '#8b5cf6' : '#374151',
+                  border: '1px solid ' + (autoLoadEnabled ? '#a78bfa' : '#4b5563'),
+                  padding: '8px 16px',
+                  borderRadius: '6px',
+                  color: 'white',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+                title={autoLoadEnabled ? 'Auto-load enabled - will load more trajectory as animation progresses' : 'Enable auto-load for infinite trajectory'}
+              >
+                {autoLoadEnabled ? '🔄 Auto' : '⏸️ Manual'}
+                {autoLoadState?.isLoading && (
+                  <span style={{ fontSize: '10px', opacity: 0.8 }}>Loading...</span>
+                )}
+              </button>
+              
+              {onAutoLoadSettings && (
+                <button
+                  onClick={onAutoLoadSettings}
+                  style={{
+                    background: '#16213e',
+                    border: '1px solid #0f3460',
+                    padding: '8px 12px',
+                    borderRadius: '6px',
+                    color: '#cbd5e1',
+                    cursor: 'pointer',
+                    fontSize: '14px'
+                  }}
+                  title="Auto-load settings"
+                >
+                  ⚙️
+                </button>
+              )}
+            </div>
+          )}
         </div>
+        
+        {/* Auto-load status */}
+        {autoLoadEnabled && autoLoadState && (
+          <div style={{ 
+            fontSize: '11px', 
+            color: '#9ca3af', 
+            textAlign: 'center',
+            marginTop: '4px'
+          }}>
+            {autoLoadState.isLoading && (
+              <span>⏳ Loading next segment...</span>
+            )}
+            {autoLoadState.segmentsLoaded > 0 && !autoLoadState.isLoading && (
+              <span>✅ {autoLoadState.segmentsLoaded} segment{autoLoadState.segmentsLoaded > 1 ? 's' : ''} loaded</span>
+            )}
+            {autoLoadState.error && (
+              <span style={{ color: '#ef4444' }}>❌ {autoLoadState.error}</span>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )
@@ -818,6 +891,11 @@ export default function SolarSystem({
   animationSpeed,
   currentTimeIndex,
   onTimeIndexChange,
+  autoLoadEnabled,
+  onAutoLoadToggle,
+  autoLoadState,
+  multiAutoLoadState,
+  onAutoLoadSettings,
   onAnimationToggle,
   onAnimationSpeedChange
 }) {
@@ -836,6 +914,30 @@ export default function SolarSystem({
   }, [trajectory, batchTrajectories, selectedObjects, currentTimeIndex])
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+      {/* Single-Object Auto-Load Indicator */}
+      {autoLoadEnabled && autoLoadState && trajectory && !batchTrajectories && (
+        <AutoLoadIndicator
+          enabled={autoLoadEnabled}
+          isLoading={autoLoadState.isLoading}
+          loadProgress={autoLoadState.loadProgress}
+          segmentsLoaded={autoLoadState.segmentsLoaded}
+          error={autoLoadState.error}
+          trajectory={trajectory}
+        />
+      )}
+      
+      {/* Multi-Object Auto-Load Indicator */}
+      {autoLoadEnabled && multiAutoLoadState && batchTrajectories && (
+        <MultiObjectAutoLoadIndicator
+          enabled={autoLoadEnabled}
+          loadingStates={multiAutoLoadState.loadingStates}
+          selectedObjects={selectedObjects}
+          activeLoads={multiAutoLoadState.activeLoads}
+          queuedLoads={multiAutoLoadState.queuedLoads}
+          totalSegmentsLoaded={multiAutoLoadState.totalSegmentsLoaded}
+        />
+      )}
+      
       {/* Method Badge Overlay */}
       {trajectory && !trajectoryComparison && !batchTrajectories && (
         <div style={{
@@ -1105,6 +1207,10 @@ export default function SolarSystem({
       onAnimationToggle={onAnimationToggle}
       onAnimationSpeedChange={onAnimationSpeedChange}
       onTimeIndexChange={onTimeIndexChange}
+      autoLoadEnabled={autoLoadEnabled}
+      onAutoLoadToggle={onAutoLoadToggle}
+      autoLoadState={autoLoadState}
+      onAutoLoadSettings={onAutoLoadSettings}
     />
     </div>
   )

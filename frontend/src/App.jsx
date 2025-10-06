@@ -3,7 +3,10 @@ import SolarSystem from './components/SolarSystem'
 import InfoPanel from './components/InfoPanel'
 import Dashboard from './components/Dashboard'
 import UnifiedObjectSelector from './components/UnifiedObjectSelector'
+import AutoLoadSettings from './components/AutoLoadSettings'
 import { fetchComets, fetchTrajectory, fetchBatchTrajectories } from './api'
+import { useTrajectoryAutoLoad } from './hooks/useTrajectoryAutoLoad'
+import { useMultiObjectAutoLoad } from './hooks/useMultiObjectAutoLoad'
 import './App.css'
 
 function App() {
@@ -27,6 +30,63 @@ function App() {
   const [selectedObjects, setSelectedObjects] = useState([])
   const [batchTrajectories, setBatchTrajectories] = useState({})
   const [batchLoading, setBatchLoading] = useState(false)
+  
+  // Auto-load state
+  const [autoLoadEnabled, setAutoLoadEnabled] = useState(false)
+  const [autoLoadSettings, setAutoLoadSettings] = useState({
+    thresholdPercent: 0.8,
+    timeBeforeEndSeconds: 5,
+    segmentDurationDays: 365,
+    segmentPoints: 100,
+    maxPoints: 10000
+  })
+  const [showAutoLoadSettings, setShowAutoLoadSettings] = useState(false)
+  
+  // Single-object auto-load hook
+  const autoLoad = useTrajectoryAutoLoad({
+    enabled: autoLoadEnabled && !multiObjectMode,
+    trajectory,
+    currentTimeIndex,
+    animationSpeed,
+    animationPlaying,
+    method,
+    segmentDurationDays: autoLoadSettings.segmentDurationDays,
+    segmentPoints: autoLoadSettings.segmentPoints,
+    thresholdPercent: autoLoadSettings.thresholdPercent,
+    timeBeforeEndSeconds: autoLoadSettings.timeBeforeEndSeconds,
+    maxPoints: autoLoadSettings.maxPoints,
+    onTrajectoryUpdate: (updatedTrajectory) => {
+      setTrajectory(updatedTrajectory)
+    },
+    onError: (err) => {
+      console.error('Auto-load error:', err)
+      setError('Auto-load failed: ' + err.message)
+    }
+  })
+  
+  // Multi-object auto-load hook
+  const multiAutoLoad = useMultiObjectAutoLoad({
+    enabled: autoLoadEnabled && multiObjectMode,
+    batchTrajectories,
+    selectedObjects,
+    currentTimeIndex,
+    animationSpeed,
+    animationPlaying,
+    method,
+    segmentDurationDays: autoLoadSettings.segmentDurationDays,
+    segmentPoints: autoLoadSettings.segmentPoints,
+    thresholdPercent: autoLoadSettings.thresholdPercent,
+    timeBeforeEndSeconds: autoLoadSettings.timeBeforeEndSeconds,
+    maxPointsPerObject: autoLoadSettings.maxPoints,
+    maxConcurrentLoads: 2,
+    onTrajectoriesUpdate: (updatedBatch) => {
+      setBatchTrajectories(updatedBatch)
+    },
+    onError: (designation, err) => {
+      console.error(`Auto-load error for ${designation}:`, err)
+      setError(`Auto-load failed for ${designation}: ${err.message}`)
+    }
+  })
 
   // Load comets on mount
   useEffect(() => {
@@ -160,20 +220,35 @@ function App() {
       if (data.trajectories) {
         Object.keys(data.trajectories).forEach(designation => {
           const traj = data.trajectories[designation]
-          if (traj && traj.points) {
+          if (traj && traj.points && traj.points.length > 0) {
+            // Get start time from first point
+            const startTime = traj.points[0].time
+            const endTime = traj.points[traj.points.length - 1].time
+            
             // Convert 'points' to 'trajectory' and add missing fields
             normalizedTrajectories[designation] = {
               ...traj,
-              trajectory: traj.points.map((point, idx) => ({
-                ...point,
-                days_from_epoch: idx * (days / points),
+              designation: designation,
+              start_time: startTime,
+              end_time: endTime,
+              days: days,
+              method: method,
+              trajectory: traj.points.map((point) => ({
+                time: point.time,
+                position: point.position,
+                days_from_epoch: point.time - startTime,
                 distance_from_sun: Math.sqrt(
                   point.position.x ** 2 + 
                   point.position.y ** 2 + 
                   point.position.z ** 2
                 )
               })),
-              method: method
+              // Add final_state for continuation support
+              final_state: {
+                position: traj.points[traj.points.length - 1].position,
+                velocity: traj.points[traj.points.length - 1].velocity,
+                time: traj.points[traj.points.length - 1].time
+              }
             }
           }
         })
@@ -316,7 +391,23 @@ function App() {
             onTimeIndexChange={handleTimeIndexChange}
             onAnimationToggle={handleAnimationToggle}
             onAnimationSpeedChange={handleAnimationSpeedChange}
+            autoLoadEnabled={autoLoadEnabled}
+            onAutoLoadToggle={() => setAutoLoadEnabled(!autoLoadEnabled)}
+            autoLoadState={multiObjectMode ? multiAutoLoad : autoLoad}
+            multiAutoLoadState={multiObjectMode ? multiAutoLoad : null}
+            onAutoLoadSettings={() => setShowAutoLoadSettings(true)}
           />
+          
+          {/* Auto-load settings panel */}
+          {showAutoLoadSettings && (
+            <AutoLoadSettings
+              enabled={autoLoadEnabled}
+              onEnabledChange={setAutoLoadEnabled}
+              settings={autoLoadSettings}
+              onSettingsChange={setAutoLoadSettings}
+              onClose={() => setShowAutoLoadSettings(false)}
+            />
+          )}
           {batchLoading && (
             <div className="batch-loading-overlay">
               Loading {selectedObjects.length} trajectories...

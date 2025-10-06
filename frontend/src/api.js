@@ -102,3 +102,23 @@ export const fetchPlanetPositions = async (time = null, planets = null) => {
   const response = await api.get('/api/planets/positions', { params })
   return response.data
 }
+
+/**
+ * Continue trajectory calculation from a given state vector.
+ * Enables infinite trajectory streaming.
+ * 
+ * @param {Object} state - State vector with position, velocity, and time
+ * @param {number} durationDays - Number of days to continue
+ * @param {number} numPoints - Number of trajectory points
+ * @param {string} method - Propagation method ('twobody' or 'nbody')
+ * @returns {Promise<Object>} Continuation trajectory data
+ */
+export const continueTrajectory = async (state, durationDays = 365, numPoints = 100, method = 'twobody') => {
+  const response = await api.post('/trajectory/continue', {
+    state,
+    duration_days: durationDays,
+    num_points: numPoints,
+    method
+  })
+  return response.data
+}

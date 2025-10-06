@@ -128,6 +128,39 @@ class StateVector:
     # Time (Julian Date)
     time: float
     
+    def to_dict(self) -> dict:
+        """Convert to JSON-serializable dict for API responses."""
+        return {
+            "position": {
+                "x": float(self.position[0]),
+                "y": float(self.position[1]),
+                "z": float(self.position[2])
+            },
+            "velocity": {
+                "x": float(self.velocity[0]),
+                "y": float(self.velocity[1]),
+                "z": float(self.velocity[2])
+            },
+            "time": float(self.time)
+        }
+    
+    @classmethod
+    def from_dict(cls, data: dict) -> 'StateVector':
+        """Create StateVector from dict (e.g., from API request)."""
+        return cls(
+            position=np.array([
+                data["position"]["x"],
+                data["position"]["y"],
+                data["position"]["z"]
+            ]),
+            velocity=np.array([
+                data["velocity"]["x"],
+                data["velocity"]["y"],
+                data["velocity"]["z"]
+            ]),
+            time=data["time"]
+        )
+    
     def __post_init__(self):
         """Ensure arrays are numpy arrays."""
         self.position = np.asarray(self.position, dtype=float)
@@ -295,16 +328,108 @@ def cartesian_to_keplerian(state: StateVector) -> KeplerianElements:
     Convert Cartesian state vector to Keplerian orbital elements.
     
     This is the inverse transformation of keplerian_to_cartesian.
+    Uses standard orbital mechanics formulas.
     
     Args:
-        state: Cartesian state vector
+        state: Cartesian state vector (heliocentric ecliptic J2000)
         
     Returns:
         Keplerian orbital elements
     """
-    # This is complex and would require significant implementation
-    # For Phase 1, we'll focus on the forward transformation
-    raise NotImplementedError("Cartesian to Keplerian conversion not yet implemented")
+    # Gravitational parameter for the Sun (AU³/day²)
+    mu = 0.0002959122082855911
+    
+    r = state.position
+    v = state.velocity
+    
+    # Distance and speed
+    r_mag = np.linalg.norm(r)
+    v_mag = np.linalg.norm(v)
+    
+    # Specific angular momentum vector
+    h = np.cross(r, v)
+    h_mag = np.linalg.norm(h)
+    
+    # Node vector (points to ascending node)
+    k = np.array([0, 0, 1])  # z-axis
+    n = np.cross(k, h)
+    n_mag = np.linalg.norm(n)
+    
+    # Eccentricity vector
+    e_vec = ((v_mag**2 - mu/r_mag) * r - np.dot(r, v) * v) / mu
+    e = np.linalg.norm(e_vec)
+    
+    # Specific orbital energy
+    energy = v_mag**2 / 2 - mu / r_mag
+    
+    # Semi-major axis
+    if abs(e - 1.0) > 1e-10:  # Not parabolic
+        a = -mu / (2 * energy)
+    else:  # Parabolic orbit
+        # For parabolic orbits, use perihelion distance
+        a = h_mag**2 / mu
+    
+    # Inclination
+    i = np.arccos(h[2] / h_mag)
+    
+    # Longitude of ascending node
+    if n_mag > 1e-10:
+        Omega = np.arccos(n[0] / n_mag)
+        if n[1] < 0:
+            Omega = 2 * np.pi - Omega
+    else:
+        # Orbit in reference plane or perpendicular to it
+        Omega = 0.0
+    
+    # Argument of perihelion
+    if n_mag > 1e-10 and e > 1e-10:
+        omega = np.arccos(np.dot(n, e_vec) / (n_mag * e))
+        if e_vec[2] < 0:
+            omega = 2 * np.pi - omega
+    else:
+        omega = 0.0
+    
+    # True anomaly
+    if e > 1e-10:
+        nu = np.arccos(np.dot(e_vec, r) / (e * r_mag))
+        if np.dot(r, v) < 0:
+            nu = 2 * np.pi - nu
+    else:
+        # Circular orbit
+        if n_mag > 1e-10:
+            nu = np.arccos(np.dot(n, r) / (n_mag * r_mag))
+            if r[2] < 0:
+                nu = 2 * np.pi - nu
+        else:
+            nu = np.arccos(r[0] / r_mag)
+            if r[1] < 0:
+                nu = 2 * np.pi - nu
+    
+    # Eccentric anomaly (for elliptical orbits)
+    if e < 1.0:
+        E = 2 * np.arctan(np.sqrt((1-e)/(1+e)) * np.tan(nu/2))
+        M = E - e * np.sin(E)
+    elif e > 1.0:
+        # Hyperbolic anomaly
+        H = 2 * np.arctanh(np.sqrt((e-1)/(e+1)) * np.tan(nu/2))
+        M = e * np.sinh(H) - H
+    else:
+        # Parabolic
+        D = np.tan(nu/2)
+        M = D + D**3/3
+    
+    # Normalize mean anomaly to [0, 2π]
+    M = M % (2 * np.pi)
+    
+    return KeplerianElements(
+        semi_major_axis=a,
+        eccentricity=e,
+        inclination=i,
+        longitude_ascending_node=Omega,
+        argument_of_perihelion=omega,
+        mean_anomaly=M,
+        epoch=state.time
+    )
 
 
 if __name__ == "__main__":
