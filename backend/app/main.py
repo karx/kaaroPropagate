@@ -19,6 +19,7 @@ from .core.integration import build_catalog_from_mpc
 from .models.comet import CometCatalog
 from .physics.propagator import TwoBodyPropagator
 from .physics.nbody import NBodyPropagator
+from .physics.batch import BatchTrajectoryCalculator, TrajectoryResult
 
 # Configure logging
 logging.basicConfig(
@@ -91,6 +92,9 @@ app.add_middleware(
 
 # Global catalog (loaded on startup)
 catalog: Optional[CometCatalog] = None
+
+# Batch trajectory calculator
+batch_calculator = BatchTrajectoryCalculator(cache_enabled=True)
 
 # Performance metrics
 performance_metrics = {
@@ -637,6 +641,252 @@ async def get_statistics():
     return {
         **stats,
         "orbit_types": orbit_types
+    }
+
+
+# ============================================================================
+# Multi-Object / Batch Endpoints
+# ============================================================================
+
+from pydantic import BaseModel
+from typing import List as TypingList
+
+class BatchTrajectoryRequest(BaseModel):
+    """Request model for batch trajectory calculation."""
+    designations: TypingList[str]
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    days: Optional[int] = 365
+    num_points: int = 100
+    method: str = "twobody"
+    parallel: bool = True
+
+
+@app.get("/api/objects/batch")
+async def get_objects_batch(
+    designations: Optional[str] = Query(None, description="Comma-separated list of designations"),
+    category: Optional[str] = Query(None, description="Filter by category (neo, jupiter, long_period, etc.)"),
+    q_min: Optional[float] = Query(None, description="Minimum perihelion distance (AU)"),
+    q_max: Optional[float] = Query(None, description="Maximum perihelion distance (AU)"),
+    a_min: Optional[float] = Query(None, description="Minimum semi-major axis (AU)"),
+    a_max: Optional[float] = Query(None, description="Maximum semi-major axis (AU)"),
+    e_max: Optional[float] = Query(None, description="Maximum eccentricity"),
+    period_min: Optional[float] = Query(None, description="Minimum period (years)"),
+    period_max: Optional[float] = Query(None, description="Maximum period (years)"),
+    limit: int = Query(100, ge=1, le=1000, description="Maximum number of objects to return")
+):
+    """
+    Get multiple objects by designation list or filters.
+    
+    Examples:
+    - /api/objects/batch?designations=1P,2P,9P
+    - /api/objects/batch?category=neo&limit=50
+    - /api/objects/batch?q_max=1.3&limit=100  (NEOs)
+    - /api/objects/batch?a_min=30&a_max=50  (Kuiper Belt region)
+    """
+    if not catalog:
+        raise HTTPException(status_code=503, detail="Catalog not loaded")
+    
+    filtered_comets = []
+    
+    # Filter by explicit designations
+    if designations:
+        designation_list = [d.strip() for d in designations.split(',')]
+        for comet in catalog.comets:
+            if comet.designation in designation_list:
+                filtered_comets.append(comet)
+    else:
+        # Filter by criteria
+        for comet in catalog.comets:
+            if not comet.elements:
+                continue
+            
+            # Category filter
+            if category:
+                q = comet.elements.perihelion_distance
+                a = comet.elements.semi_major_axis
+                e = comet.elements.eccentricity
+                period = comet.elements.orbital_period / 365.25
+                
+                if category == "neo" and q >= 1.3:
+                    continue
+                elif category == "jupiter" and not (2 < period < 20):
+                    continue
+                elif category == "long_period" and period <= 200:
+                    continue
+                elif category == "kuiper_belt" and not (30 < a < 50 and e < 0.2):
+                    continue
+                elif category == "oort_cloud" and a <= 10000:
+                    continue
+                elif category == "hyperbolic" and e <= 1.0:
+                    continue
+            
+            # Perihelion filter
+            if q_min is not None and comet.elements.perihelion_distance < q_min:
+                continue
+            if q_max is not None and comet.elements.perihelion_distance > q_max:
+                continue
+            
+            # Semi-major axis filter
+            if a_min is not None and comet.elements.semi_major_axis < a_min:
+                continue
+            if a_max is not None and comet.elements.semi_major_axis > a_max:
+                continue
+            
+            # Eccentricity filter
+            if e_max is not None and comet.elements.eccentricity > e_max:
+                continue
+            
+            # Period filter
+            if period_min is not None or period_max is not None:
+                period = comet.elements.orbital_period / 365.25
+                if period_min is not None and period < period_min:
+                    continue
+                if period_max is not None and period > period_max:
+                    continue
+            
+            filtered_comets.append(comet)
+            
+            if len(filtered_comets) >= limit:
+                break
+    
+    # Build response
+    objects = []
+    for comet in filtered_comets[:limit]:
+        obj = {
+            "designation": comet.designation,
+            "name": comet.name,
+            "orbit_type": comet.orbit_type,
+            "periodic_number": comet.periodic_number,
+            "is_periodic": comet.is_periodic,
+            "is_hyperbolic": comet.elements.eccentricity > 1.0 if comet.elements else False
+        }
+        
+        if comet.elements:
+            # Handle infinity values for hyperbolic orbits
+            period_days = comet.elements.orbital_period
+            if np.isinf(period_days) or np.isnan(period_days):
+                period_days = None
+                period_years = None
+            else:
+                period_years = period_days / 365.25
+            
+            obj["orbital_elements"] = {
+                "semi_major_axis": comet.elements.semi_major_axis,
+                "eccentricity": comet.elements.eccentricity,
+                "inclination_deg": float(np.degrees(comet.elements.inclination)),
+                "perihelion_distance": comet.elements.perihelion_distance,
+                "epoch": comet.elements.epoch,
+                "period_days": period_days,
+                "period_years": period_years
+            }
+        
+        objects.append(obj)
+    
+    return {
+        "total": len(filtered_comets),
+        "returned": len(objects),
+        "limit": limit,
+        "objects": objects
+    }
+
+
+@app.post("/api/trajectories/batch")
+async def calculate_batch_trajectories(request: BatchTrajectoryRequest):
+    """
+    Calculate trajectories for multiple objects in parallel.
+    
+    Request body:
+    {
+        "designations": ["1P", "2P", "9P"],
+        "start_date": "2024-01-01",  // Optional
+        "end_date": "2024-12-31",    // Optional
+        "days": 365,                  // Alternative to end_date
+        "num_points": 100,
+        "method": "twobody",          // or "nbody"
+        "parallel": true
+    }
+    """
+    if not catalog:
+        raise HTTPException(status_code=503, detail="Catalog not loaded")
+    
+    # Validate request
+    if len(request.designations) > 100:
+        raise HTTPException(status_code=400, detail="Maximum 100 objects per batch request")
+    
+    # Find comets
+    comets = []
+    not_found = []
+    
+    for designation in request.designations:
+        found = False
+        for comet in catalog.comets:
+            if comet.designation == designation:
+                comets.append(comet)
+                found = True
+                break
+        if not found:
+            not_found.append(designation)
+    
+    if not comets:
+        raise HTTPException(status_code=404, detail=f"No comets found. Not found: {not_found}")
+    
+    # Determine time range
+    if request.start_date and request.end_date:
+        from datetime import datetime as dt
+        start_jd = 2451545.0 + (dt.fromisoformat(request.start_date) - dt(2000, 1, 1)).days
+        end_jd = 2451545.0 + (dt.fromisoformat(request.end_date) - dt(2000, 1, 1)).days
+    else:
+        # Use epoch + days
+        start_jd = comets[0].elements.epoch
+        end_jd = start_jd + (request.days or 365)
+    
+    # Calculate trajectories
+    logger.info(f"Batch trajectory request: {len(comets)} objects, method={request.method}, parallel={request.parallel}")
+    
+    results, stats = batch_calculator.calculate(
+        comets=comets,
+        start_time=start_jd,
+        end_time=end_jd,
+        num_points=request.num_points,
+        method=request.method,
+        parallel=request.parallel
+    )
+    
+    # Build response
+    trajectories = {}
+    errors = {}
+    
+    for designation, result in results.items():
+        if result.success:
+            trajectories[designation] = {
+                "designation": designation,
+                "points": [
+                    {
+                        "time": state.time,
+                        "position": {
+                            "x": state.position[0],
+                            "y": state.position[1],
+                            "z": state.position[2]
+                        },
+                        "velocity": {
+                            "x": state.velocity[0],
+                            "y": state.velocity[1],
+                            "z": state.velocity[2]
+                        }
+                    }
+                    for state in result.trajectory
+                ],
+                "calculation_time_ms": result.calculation_time_ms
+            }
+        else:
+            errors[designation] = result.error
+    
+    return {
+        "trajectories": trajectories,
+        "errors": errors,
+        "not_found": not_found,
+        "statistics": stats
     }
 
 
