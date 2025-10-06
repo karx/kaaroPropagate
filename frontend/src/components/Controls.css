@@ -217,3 +217,30 @@
 .controls::-webkit-scrollbar-thumb:hover {
   background: #667eea;
 }
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+}
+
+.multi-object-toggle {
+  padding: 6px 12px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 4px;
+  color: white;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.2s;
+}
+
+.multi-object-toggle:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.multi-object-toggle.active {
+  background: rgba(68, 68, 255, 0.3);
+  border-color: rgba(68, 68, 255, 0.5);
+}

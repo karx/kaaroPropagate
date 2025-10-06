@@ -41,3 +41,55 @@ export const fetchStatistics = async () => {
   const response = await api.get('/statistics')
   return response.data
 }
+
+// Multi-object batch APIs
+export const fetchObjectsBatch = async ({
+  designations = null,
+  category = null,
+  qMin = null,
+  qMax = null,
+  aMin = null,
+  aMax = null,
+  eMax = null,
+  periodMin = null,
+  periodMax = null,
+  limit = 100
+} = {}) => {
+  const params = { limit }
+  if (designations) params.designations = designations.join(',')
+  if (category) params.category = category
+  if (qMin !== null) params.q_min = qMin
+  if (qMax !== null) params.q_max = qMax
+  if (aMin !== null) params.a_min = aMin
+  if (aMax !== null) params.a_max = aMax
+  if (eMax !== null) params.e_max = eMax
+  if (periodMin !== null) params.period_min = periodMin
+  if (periodMax !== null) params.period_max = periodMax
+  
+  const response = await api.get('/api/objects/batch', { params })
+  return response.data
+}
+
+export const fetchBatchTrajectories = async ({
+  designations,
+  startDate = null,
+  endDate = null,
+  days = 365,
+  numPoints = 100,
+  method = 'twobody',
+  parallel = true
+}) => {
+  const data = {
+    designations,
+    days,
+    num_points: numPoints,
+    method,
+    parallel
+  }
+  
+  if (startDate) data.start_date = startDate
+  if (endDate) data.end_date = endDate
+  
+  const response = await api.post('/api/trajectories/batch', data)
+  return response.data
+}

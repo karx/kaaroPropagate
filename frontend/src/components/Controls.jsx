@@ -11,12 +11,23 @@ export default function Controls({
   method,
   onMethodChange,
   compareMode,
-  onCompareModeToggle
+  onCompareModeToggle,
+  multiObjectMode,
+  onMultiObjectToggle
 }) {
   return (
     <div className="controls">
       <div className="controls-section">
-        <h3>🔭 Select Comet</h3>
+        <div className="section-header">
+          <h3>🔭 Select Comet</h3>
+          <button
+            className={`multi-object-toggle ${multiObjectMode ? 'active' : ''}`}
+            onClick={onMultiObjectToggle}
+            title="Toggle multi-object mode"
+          >
+            {multiObjectMode ? '📊 Multi' : '🎯 Single'}
+          </button>
+        </div>
         <div className="comet-list">
           {comets.map((comet) => (
             <button

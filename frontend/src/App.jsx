@@ -3,7 +3,8 @@ import SolarSystem from './components/SolarSystem'
 import Controls from './components/Controls'
 import InfoPanel from './components/InfoPanel'
 import Dashboard from './components/Dashboard'
-import { fetchComets, fetchTrajectory } from './api'
+import MultiObjectSelector from './components/MultiObjectSelector'
+import { fetchComets, fetchTrajectory, fetchBatchTrajectories } from './api'
 import './App.css'
 
 function App() {
@@ -21,6 +22,12 @@ function App() {
   const [animationPlaying, setAnimationPlaying] = useState(false)
   const [animationSpeed, setAnimationSpeed] = useState(1)
   const [currentTimeIndex, setCurrentTimeIndex] = useState(0)
+  
+  // Multi-object state
+  const [multiObjectMode, setMultiObjectMode] = useState(false)
+  const [selectedObjects, setSelectedObjects] = useState([])
+  const [batchTrajectories, setBatchTrajectories] = useState({})
+  const [batchLoading, setBatchLoading] = useState(false)
 
   // Load comets on mount
   useEffect(() => {
@@ -116,6 +123,59 @@ function App() {
     setCurrentTimeIndex(index)
   }
 
+  // Multi-object handlers
+  const handleMultiObjectToggle = () => {
+    setMultiObjectMode(!multiObjectMode)
+    if (!multiObjectMode) {
+      // Entering multi-object mode
+      setSelectedObjects([])
+      setBatchTrajectories({})
+    } else {
+      // Exiting multi-object mode
+      setSelectedObjects([])
+      setBatchTrajectories({})
+    }
+  }
+
+  const handleObjectsSelected = (objects) => {
+    setSelectedObjects(objects)
+  }
+
+  const loadBatchTrajectories = async () => {
+    if (selectedObjects.length === 0) return
+    
+    try {
+      setBatchLoading(true)
+      const designations = selectedObjects.map(obj => obj.designation)
+      
+      const data = await fetchBatchTrajectories({
+        designations,
+        days,
+        numPoints: points,
+        method,
+        parallel: true
+      })
+      
+      setBatchTrajectories(data.trajectories || {})
+      
+      if (data.errors && Object.keys(data.errors).length > 0) {
+        console.warn('Some trajectories failed:', data.errors)
+      }
+    } catch (err) {
+      console.error('Failed to load batch trajectories:', err)
+      setError(err.message)
+    } finally {
+      setBatchLoading(false)
+    }
+  }
+
+  // Load batch trajectories when objects or parameters change
+  useEffect(() => {
+    if (multiObjectMode && selectedObjects.length > 0) {
+      loadBatchTrajectories()
+    }
+  }, [selectedObjects, days, points, method])
+
   if (view === 'dashboard') {
     return <Dashboard onBack={() => setView('visualization')} />
   }
@@ -165,24 +225,37 @@ function App() {
       )}
 
       <div className="app-content">
-        <Controls
-          comets={comets}
-          selectedComet={selectedComet}
-          onCometSelect={handleCometSelect}
-          days={days}
-          onDaysChange={handleDaysChange}
-          points={points}
-          onPointsChange={handlePointsChange}
-          method={method}
-          onMethodChange={handleMethodChange}
-          compareMode={compareMode}
-          onCompareModeToggle={handleCompareModeToggle}
-        />
+        <div className="left-panel">
+          <Controls
+            comets={comets}
+            selectedComet={selectedComet}
+            onCometSelect={handleCometSelect}
+            days={days}
+            onDaysChange={handleDaysChange}
+            points={points}
+            onPointsChange={handlePointsChange}
+            method={method}
+            onMethodChange={handleMethodChange}
+            compareMode={compareMode}
+            onCompareModeToggle={handleCompareModeToggle}
+            multiObjectMode={multiObjectMode}
+            onMultiObjectToggle={handleMultiObjectToggle}
+          />
+          
+          {multiObjectMode && (
+            <MultiObjectSelector
+              onObjectsSelected={handleObjectsSelected}
+              selectedObjects={selectedObjects}
+            />
+          )}
+        </div>
 
         <div className="visualization">
           <SolarSystem 
-            trajectory={trajectory} 
-            trajectoryComparison={compareMode ? trajectoryNbody : null}
+            trajectory={multiObjectMode ? null : trajectory} 
+            trajectoryComparison={compareMode && !multiObjectMode ? trajectoryNbody : null}
+            batchTrajectories={multiObjectMode ? batchTrajectories : null}
+            selectedObjects={multiObjectMode ? selectedObjects : null}
             animationPlaying={animationPlaying}
             animationSpeed={animationSpeed}
             currentTimeIndex={currentTimeIndex}
@@ -190,11 +263,19 @@ function App() {
             onAnimationToggle={handleAnimationToggle}
             onAnimationSpeedChange={handleAnimationSpeedChange}
           />
+          {batchLoading && (
+            <div className="batch-loading-overlay">
+              Loading {selectedObjects.length} trajectories...
+            </div>
+          )}
         </div>
 
         <InfoPanel
-          comet={selectedComet}
-          trajectory={trajectory}
+          comet={multiObjectMode ? null : selectedComet}
+          trajectory={multiObjectMode ? null : trajectory}
+          multiObjectMode={multiObjectMode}
+          selectedObjects={selectedObjects}
+          batchTrajectories={batchTrajectories}
         />
       </div>
     </div>
