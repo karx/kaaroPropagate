@@ -18,6 +18,9 @@ function App() {
   const [method, setMethod] = useState('twobody')
   const [compareMode, setCompareMode] = useState(false)
   const [trajectoryNbody, setTrajectoryNbody] = useState(null)
+  const [animationPlaying, setAnimationPlaying] = useState(false)
+  const [animationSpeed, setAnimationSpeed] = useState(1)
+  const [currentTimeIndex, setCurrentTimeIndex] = useState(0)
 
   // Load comets on mount
   useEffect(() => {
@@ -101,6 +104,18 @@ function App() {
     }
   }
 
+  const handleAnimationToggle = () => {
+    setAnimationPlaying(!animationPlaying)
+  }
+
+  const handleAnimationSpeedChange = (speed) => {
+    setAnimationSpeed(speed)
+  }
+
+  const handleTimeIndexChange = (index) => {
+    setCurrentTimeIndex(index)
+  }
+
   if (view === 'dashboard') {
     return <Dashboard onBack={() => setView('visualization')} />
   }
@@ -168,6 +183,12 @@ function App() {
           <SolarSystem 
             trajectory={trajectory} 
             trajectoryComparison={compareMode ? trajectoryNbody : null}
+            animationPlaying={animationPlaying}
+            animationSpeed={animationSpeed}
+            currentTimeIndex={currentTimeIndex}
+            onTimeIndexChange={handleTimeIndexChange}
+            onAnimationToggle={handleAnimationToggle}
+            onAnimationSpeedChange={handleAnimationSpeedChange}
           />
         </div>
 
