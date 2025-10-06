@@ -644,6 +644,102 @@ async def get_statistics():
     }
 
 
+@app.get("/api/planets/positions")
+async def get_planet_positions(
+    time: Optional[float] = Query(None, description="Julian Date (defaults to J2000)"),
+    planets: Optional[str] = Query(None, description="Comma-separated planet names (defaults to all)")
+):
+    """
+    Get positions of planets at a given time.
+    
+    Args:
+        time: Julian Date (defaults to J2000 = 2451545.0)
+        planets: Comma-separated list of planets (mercury, venus, earth, mars, jupiter, saturn, uranus, neptune)
+    
+    Returns:
+        Dictionary with planet positions in AU
+    """
+    from .physics.nbody import get_planet_position, J2000, PLANET_ELEMENTS
+    
+    # Default to J2000 if no time specified
+    if time is None:
+        time = J2000
+    
+    # Determine which planets to include
+    all_planets = ['mercury', 'venus', 'earth', 'mars', 'jupiter', 'saturn', 'uranus', 'neptune']
+    if planets:
+        requested_planets = [p.strip().lower() for p in planets.split(',')]
+        planet_list = [p for p in requested_planets if p in all_planets]
+    else:
+        planet_list = all_planets
+    
+    # Calculate positions
+    positions = {}
+    for planet_name in planet_list:
+        try:
+            # For inner planets, we need to add their orbital elements
+            if planet_name in ['mercury', 'venus', 'earth', 'mars']:
+                # Use simplified Keplerian elements for inner planets
+                inner_elements = {
+                    'mercury': {'a': 0.387, 'e': 0.206, 'i': np.radians(7.0), 'Omega': np.radians(48.3), 'omega': np.radians(29.1), 'M0': np.radians(174.8), 'n': 2 * np.pi / (87.97 / 365.25)},
+                    'venus': {'a': 0.723, 'e': 0.007, 'i': np.radians(3.4), 'Omega': np.radians(76.7), 'omega': np.radians(54.9), 'M0': np.radians(50.4), 'n': 2 * np.pi / (224.7 / 365.25)},
+                    'earth': {'a': 1.000, 'e': 0.017, 'i': np.radians(0.0), 'Omega': np.radians(0.0), 'omega': np.radians(102.9), 'M0': np.radians(100.5), 'n': 2 * np.pi / 365.25},
+                    'mars': {'a': 1.524, 'e': 0.093, 'i': np.radians(1.85), 'Omega': np.radians(49.6), 'omega': np.radians(286.5), 'M0': np.radians(19.4), 'n': 2 * np.pi / (686.98 / 365.25)},
+                }
+                elements = inner_elements[planet_name]
+                # Calculate position using Keplerian elements
+                from .physics.nbody import solve_kepler
+                dt = time - J2000
+                M = elements['M0'] + elements['n'] * dt
+                E = solve_kepler(M, elements['e'])
+                
+                # True anomaly
+                nu = 2 * np.arctan2(
+                    np.sqrt(1 + elements['e']) * np.sin(E / 2),
+                    np.sqrt(1 - elements['e']) * np.cos(E / 2)
+                )
+                
+                # Distance
+                r = elements['a'] * (1 - elements['e'] * np.cos(E))
+                
+                # Position in orbital plane
+                x_orb = r * np.cos(nu)
+                y_orb = r * np.sin(nu)
+                
+                # Rotate to ecliptic coordinates
+                cos_omega = np.cos(elements['omega'])
+                sin_omega = np.sin(elements['omega'])
+                cos_i = np.cos(elements['i'])
+                sin_i = np.sin(elements['i'])
+                cos_Omega = np.cos(elements['Omega'])
+                sin_Omega = np.sin(elements['Omega'])
+                
+                x = (cos_Omega * cos_omega - sin_Omega * sin_omega * cos_i) * x_orb + \
+                    (-cos_Omega * sin_omega - sin_Omega * cos_omega * cos_i) * y_orb
+                y = (sin_Omega * cos_omega + cos_Omega * sin_omega * cos_i) * x_orb + \
+                    (-sin_Omega * sin_omega + cos_Omega * cos_omega * cos_i) * y_orb
+                z = (sin_omega * sin_i) * x_orb + (cos_omega * sin_i) * y_orb
+                
+                pos = np.array([x, y, z])
+            else:
+                # Use existing function for outer planets
+                pos = get_planet_position(planet_name, time, use_spice=False)
+            
+            positions[planet_name] = {
+                'x': float(pos[0]),
+                'y': float(pos[1]),
+                'z': float(pos[2])
+            }
+        except Exception as e:
+            logger.error(f"Error calculating position for {planet_name}: {e}")
+            positions[planet_name] = None
+    
+    return {
+        'time': time,
+        'positions': positions
+    }
+
+
 # ============================================================================
 # Multi-Object / Batch Endpoints
 # ============================================================================
