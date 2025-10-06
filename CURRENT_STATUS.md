@@ -1,8 +1,8 @@
 # Current System Status
 
 **Date**: 2025-01-06  
-**Version**: 2.0  
-**Commit**: e378549
+**Version**: 2.1  
+**Commit**: 0711342
 
 ## Executive Summary
 
@@ -31,9 +31,10 @@ The Comet Trajectory Visualization System is now **production-ready** for educat
 - [x] Method comparison mode
 - [x] Real-time monitoring dashboard
 
-### 🚧 Phase 4: Advanced Features (Planned)
+### 🚧 Phase 4: Advanced Features (In Progress)
+- [x] Time animation controls ✅
+- [x] Physics visualization (velocity, markers) ✅
 - [ ] Non-gravitational forces
-- [ ] Time animation controls
 - [ ] Multiple comet display
 - [ ] Trajectory caching
 - [ ] Uncertainty quantification
